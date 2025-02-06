@@ -11,7 +11,7 @@ export interface SSEEvent {
 }
 
 export async function sendSSERequest(options: {
-  accessToken: string;
+  accessToken?: string | null;
   userId: string;
   sessionId: string;
   messages: ChatMessage[];

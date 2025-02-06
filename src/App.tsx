@@ -16,9 +16,10 @@ import {
   SmileOutlined, UserOutlined,
 } from '@ant-design/icons';
 import {Badge, Button, type GetProp, Space} from 'antd';
-
-import OpenAI from 'openai';
 import markdownit from 'markdown-it';
+import {ChatMessage, sendSSERequest, SSEEvent} from "./utils/sseClient.ts";
+import authStore from "./utils/authStore.ts";
+import {createSession} from "./utils/apiClient.ts";
 
 const md = markdownit({html: true, breaks: true});
 
@@ -198,13 +199,6 @@ const roles: GetProp<typeof Bubble.List, 'roles'> = {
   },
 };
 
-// 初始化 OpenAI 客户端
-const client = new OpenAI({
-  baseURL: "http://localhost/gemini/v1",
-  apiKey: "ssss",
-  dangerouslyAllowBrowser: true, // 注意：这会使您的 API 密钥暴露在客户端
-});
-
 const Independent: React.FC = () => {
     // ==================== 样式 ====================
     const {styles} = useStyle();
@@ -219,34 +213,42 @@ const Independent: React.FC = () => {
     );
 
     // ==================== 运行时逻辑 ====================
-    const [agent] = useXAgent({
-      request: async ({message}, {onSuccess, onUpdate, onError}) => {
-        if (message) {
-          let content: string = '';
-          try {
-            const stream = await client.chat.completions.create({
-              model: 'gpt-4',
-              messages: [{role: 'user', content: message}],
-              stream: true,
-            });
+  const [agent] = useXAgent({
+    request: async ({ message }, { onSuccess, onUpdate, onError }) => {
+      if (!message) return;
+      let accumulatedContent = "";
+      try {
+        const accessToken = authStore.token;
+        const userId = authStore.user.uid;
+        const sessionId = activeKey; // 当前会话的ID
+        const messagesPayload: ChatMessage[] = [{ role: "user", content: message }];
 
-
-            for await (const chunk of stream) {
-              content += chunk.choices[0]?.delta?.content || '';
-              onUpdate(content);
-
+        await sendSSERequest({
+          accessToken,
+          userId,
+          sessionId,
+          messages: messagesPayload,
+          type: "general", // 可根据业务需要修改
+          onEvent: (event: SSEEvent) => {
+            console.log("SSE Event:", event);
+            if (event.type === "delta") {
+              // 注意：这里假设 event.data 是字符串内容
+              accumulatedContent += event.data;
+              onUpdate(accumulatedContent);
+            } else {
+              console.log(`Received event type ${event.type} with data: ${event.data}`);
             }
-            onSuccess(content);
-          } catch (error) {
-            console.error('OpenAI API 错误:', error);
-            onError(error as Error);
-            const err = error instanceof Error ? error : new Error(String(error));
-            onSuccess(err.message);
-          }
-        }
+          },
+        });
+        onSuccess(accumulatedContent);
+      } catch (error) {
+        console.error("SSE Request Error:", error);
+        onError(error as Error);
+        onSuccess((error as Error).message);
       }
+    },
+  });
 
-    });
 
     const {onRequest, messages, setMessages} = useXChat({agent});
 
@@ -257,13 +259,37 @@ const Independent: React.FC = () => {
     }, [activeKey]);
 
     // ==================== 事件处理 ====================
-    const onSubmit = (nextContent: string) => {
-      if (!nextContent) return;
-      onRequest(nextContent);
-      setContent('');
-    };
+  const onSubmit = async (nextContent: string) => {
+    if (!nextContent) return;
+    // 如果当前 activeKey 为 "0"，说明还没有创建真正的会话，则使用用户输入的文字作为会话名称
+    if (activeKey === "0") {
+      const userId = authStore.user.uid;
+      try {
+        const response = await createSession({ user_id: userId, name: nextContent });
+        if (response.code === 1 && response.data) {
+          const newSession = response.data;
+          setActiveKey(newSession.id.toString());
+          setConversationsItems([
+            ...conversationsItems,
+            { key: newSession.id.toString(), label: newSession.name },
+          ]);
+        } else {
+          console.error("创建会话失败", response);
+          return;
+        }
+      } catch (err) {
+        console.error("调用 createSession 接口出错", err);
+        return;
+      }
+    }
 
-    const onPromptsItemClick: GetProp<typeof Prompts, 'onItemClick'> = (info) => {
+    // 发送消息
+    onRequest(nextContent);
+    setContent("");
+  };
+
+
+  const onPromptsItemClick: GetProp<typeof Prompts, 'onItemClick'> = (info) => {
       onRequest(info.data.description as string);
     };
 
