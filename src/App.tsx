@@ -221,6 +221,14 @@ const roles: GetProp<typeof Bubble.List, 'roles'> = {
       },
     },
   },
+  aiHistroy: {
+    placement: 'start',
+    styles: {
+      content: {
+        borderRadius: 16,
+      },
+    },
+  },
   local: {
     placement: 'end',
     variant: 'shadow',
@@ -494,7 +502,7 @@ const Independent: React.FC = () => {
     } else if (isHistory) {
       return {
         key: id,
-        role: 'local',
+        role: 'aiHistroy',
         messageRender: renderMarkdown,
         content: message,
         avatar: { icon: <OpenAIOutlined /> },
