@@ -19,12 +19,27 @@ import {Badge, Button, type GetProp, Space} from 'antd';
 import markdownit from 'markdown-it';
 import {ChatMessage, sendSSERequest, SSEEvent} from "./utils/sseClient.ts";
 import authStore from "./utils/authStore.ts";
-import {createSession} from "./utils/apiClient.ts";
+import {createSession, getHistory, listSessions} from "./utils/apiClient.ts";
+import {MessageStatus} from "@ant-design/x/es/useXChat";
 
 // 定义会话项的类型
 interface ConversationItem {
   key: string;    // 根据实际情况选择适当的类型
   label: string;  // 根据实际情况选择适当的类型
+}
+
+interface ChatSession {
+  id: number;
+  name: string;
+}
+
+interface ChatHistoryMessage {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  liked: boolean;
+  metadata: Record<string, unknown>;
+  create_time: string;
 }
 
 const md = markdownit({html: true, breaks: true});
@@ -225,6 +240,7 @@ const Independent: React.FC = () => {
   const [attachedFiles, setAttachedFiles] = React.useState<GetProp<typeof Attachments, 'items'>>(
     [],
   );
+  const [loadingHistory, setLoadingHistory] = React.useState(false);
 
   const buildActiveKey = (sessionId: string) => {
     activeKeyRef.current = sessionId;
@@ -271,12 +287,65 @@ const Independent: React.FC = () => {
 
   const {onRequest, messages, setMessages} = useXChat({agent});
 
+  const fetchHistory = async (sessionId: string) => {
+    setLoadingHistory(true);
+    try {
+      const response = await getHistory({user_id: authStore.user.uid, session_id: sessionId, offset: 1, limit: 100});
+      if (response.ok) {
+        const history: ChatHistoryMessage[] = response.data;
+        const newMessages = history.map((msg: ChatHistoryMessage) => ({
+          id: msg.id.toString(),
+          message: msg.content,
+          // 注意：将接口中的角色映射到 UI 中定义的角色
+          status: (msg.role === 'assistant' ? 'aiHistory' : 'local') as MessageStatus,
+          isHistory: msg.role === 'assistant',  // 助手消息标记为历史消息
+        }));
+        setMessages(newMessages);
+      } else {
+        console.error("获取历史记录失败", response);
+      }
+    } catch (err) {
+      console.error("调用 getHistory 接口出错", err);
+    }
+    setLoadingHistory(false);
+  };
+
   useEffect(() => {
     if (activeKey !== undefined) {
       setMessages([]);
     }
     activeKeyRef.current = activeKey;
   }, [activeKey]);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const userId = authStore.user.uid;
+        const response = await listSessions({user_id: userId});
+        if (response.ok) {
+          // 将会话数据转换为 Conversations 组件所需要的格式
+          const sessions = response.data;
+          const items = sessions.map((session: ChatSession) => ({
+            key: session.id.toString(),
+            label: session.name,
+          }));
+          setConversationsItems(items);
+          // 默认选中第一个会话，并加载其历史记录
+          if (items.length > 0) {
+            setActiveKey(items[0].key);
+            activeKeyRef.current = items[0].key;
+            fetchHistory(items[0].key);
+          }
+        } else {
+          console.error("获取会话列表失败", response);
+        }
+      } catch (err) {
+        console.error("调用 listSessions 接口出错", err);
+      }
+    };
+
+    fetchSessions();
+  }, []);
 
   // ==================== 事件处理 ====================
   const onSubmit = async (nextContent: string) => {
@@ -312,7 +381,7 @@ const Independent: React.FC = () => {
 
 
   const onPromptsItemClick: GetProp<typeof Prompts, 'onItemClick'> = async (info) => {
-    if(activeKeyRef.current==='0'){
+    if (activeKeyRef.current === '0') {
       const response = await createSession({user_id: authStore.user.uid, name: info.data.description as string});
       if (response.ok) {
         const newSession = response.data;
@@ -366,6 +435,8 @@ const Independent: React.FC = () => {
 
   const onConversationClick: GetProp<typeof Conversations, 'onActiveChange'> = (key) => {
     setActiveKey(key);
+    activeKeyRef.current = key;
+    fetchHistory(key);
   };
 
   const handleFileChange: GetProp<typeof Attachments, 'onChange'> = (info) =>
@@ -403,10 +474,15 @@ const Independent: React.FC = () => {
   );
 
   const items = messages.map((e) => {
-    const {message, id, status} = e;
+    const { message, id, status, isHistory } = e as {
+      message: string;
+      id: string;
+      status: MessageStatus;
+      isHistory?: boolean;
+    };
     //console.log("e:", e);
     const role = status === 'local' ? 'local' : 'ai';
-    if (role === 'local') {
+    if (status === 'local') {
       return ({
         key: id,
         //loading: status === 'loading',
@@ -415,6 +491,14 @@ const Independent: React.FC = () => {
         content: message,
         avatar: {icon: <UserOutlined/>}
       })
+    } else if (isHistory) {
+      return {
+        key: id,
+        role: 'local',
+        messageRender: renderMarkdown,
+        content: message,
+        avatar: { icon: <OpenAIOutlined /> },
+      };
     } else {
       return ({
         key: id,
@@ -499,7 +583,11 @@ const Independent: React.FC = () => {
       <div className={styles.chat}>
         {/* 🌟 消息列表 */}
         <Bubble.List
-          items={items.length > 0 ? items : [{content: placeholderNode, variant: 'borderless'}]}
+          items={
+            loadingHistory
+              ? [{ content: <div style={{ padding: '16px', textAlign: 'center' }}>加载中...</div>, variant: 'borderless' }]
+              : (items.length > 0 ? items : [{ content: placeholderNode, variant: 'borderless' }])
+          }
           roles={roles}
           className={styles.messages}
         />

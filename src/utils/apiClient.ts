@@ -17,8 +17,8 @@ export async function createSession(params: {
 }) {
   const response = await fetch(`${BASE_URL}/api/v1/chat/create`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ school_id: 1, chat_type: 0, ...params }),
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({school_id: 1, chat_type: 0, ...params}),
   });
   return await response.json();
 }
@@ -47,8 +47,9 @@ export async function listSessions(params: {
 /**
  * 获取会话历史记录
  */
-export async function getHistory(params: { session_id: string; offset?: number; limit?: number }) {
+export async function getHistory(params: { user_id: string, session_id: string; offset?: number; limit?: number }) {
   const searchParams = new URLSearchParams({
+    user_id: params.user_id,
     session_id: params.session_id,
     offset: params.offset?.toString() || "1",
     limit: params.limit?.toString() || "100",
