@@ -21,6 +21,12 @@ import {ChatMessage, sendSSERequest, SSEEvent} from "./utils/sseClient.ts";
 import authStore from "./utils/authStore.ts";
 import {createSession} from "./utils/apiClient.ts";
 
+// 定义会话项的类型
+interface ConversationItem {
+  key: string;    // 根据实际情况选择适当的类型
+  label: string;  // 根据实际情况选择适当的类型
+}
+
 const md = markdownit({html: true, breaks: true});
 
 // 跟单条 Bubble 的做法一样
@@ -37,12 +43,12 @@ const renderTitle = (icon: React.ReactElement, title: string) => (
 );
 
 // 默认会话列表项
-const defaultConversationsItems = [
-  {
-    key: '0',
-    label: 'What is Ant Design X?',
-  },
-];
+// const defaultConversationsItems = [
+//   {
+//     key: '0',
+//     label: 'New Chat',
+//   },
+// ];
 
 // 样式定义
 const useStyle = createStyles(({token, css}) => {
@@ -132,7 +138,14 @@ const placeholderPromptsItems: GetProp<typeof Prompts, 'items'> = [
     children: [
       {
         key: '1-1',
-        description: `What's new in X?`,
+        description: `You are a Chinese-English translation expert, tasked with translating user input from Chinese to English or from English to Chinese.
+
+- Users can send content requiring translation to the assistant, who will respond with the corresponding translation result while ensuring alignment with the conventions of the target language.
+- You may adjust the tone and style accordingly, taking into account cultural connotations and regional variations of certain terms.
+- Preserve the format of the source content during translation.
+- Do not provide any explanations or text apart from the translation.
+- Only output the translated text
+`,
       },
       {
         key: '1-2',
@@ -200,28 +213,32 @@ const roles: GetProp<typeof Bubble.List, 'roles'> = {
 };
 
 const Independent: React.FC = () => {
-    // ==================== 样式 ====================
-    const {styles} = useStyle();
+  // ==================== 样式 ====================
+  const {styles} = useStyle();
 
-    // ==================== 状态 ====================
-    const [headerOpen, setHeaderOpen] = React.useState(false);
-    const [content, setContent] = React.useState('');
-    const [conversationsItems, setConversationsItems] = React.useState(defaultConversationsItems);
-    const [activeKey, setActiveKey] = React.useState(defaultConversationsItems[0].key);
-    const [attachedFiles, setAttachedFiles] = React.useState<GetProp<typeof Attachments, 'items'>>(
-      [],
-    );
+  // ==================== 状态 ====================
+  const [headerOpen, setHeaderOpen] = React.useState(false);
+  const [content, setContent] = React.useState('');
+  const [conversationsItems, setConversationsItems] = React.useState<ConversationItem[]>([]);
+  const [activeKey, setActiveKey] = React.useState('0');
+  const activeKeyRef = React.useRef('0');
+  const [attachedFiles, setAttachedFiles] = React.useState<GetProp<typeof Attachments, 'items'>>(
+    [],
+  );
 
-    // ==================== 运行时逻辑 ====================
+  const buildActiveKey = (sessionId: string) => {
+    activeKeyRef.current = sessionId;
+  }
+  // ==================== 运行时逻辑 ====================
   const [agent] = useXAgent({
-    request: async ({ message }, { onSuccess, onUpdate, onError }) => {
+    request: async ({message}, {onSuccess, onUpdate, onError}) => {
       if (!message) return;
       let accumulatedContent = "";
+      const sessionId = activeKeyRef.current;
       try {
         const accessToken = authStore.token;
         const userId = authStore.user.uid;
-        const sessionId = activeKey; // 当前会话的ID
-        const messagesPayload: ChatMessage[] = [{ role: "user", content: message }];
+        const messagesPayload: ChatMessage[] = [{role: "user", content: message}];
 
         await sendSSERequest({
           accessToken,
@@ -230,17 +247,19 @@ const Independent: React.FC = () => {
           messages: messagesPayload,
           type: "general", // 可根据业务需要修改
           onEvent: (event: SSEEvent) => {
-            console.log("SSE Event:", event);
+            //console.log("SSE Event:", event);
             if (event.type === "delta") {
               // 注意：这里假设 event.data 是字符串内容
-              accumulatedContent += event.data;
+              const dataObj = JSON.parse(event.data)
+              accumulatedContent += dataObj.content;
               onUpdate(accumulatedContent);
+            } else if (event.type === "done") {
+              onSuccess(accumulatedContent);
             } else {
               console.log(`Received event type ${event.type} with data: ${event.data}`);
             }
           },
         });
-        onSuccess(accumulatedContent);
       } catch (error) {
         console.error("SSE Request Error:", error);
         onError(error as Error);
@@ -250,28 +269,31 @@ const Independent: React.FC = () => {
   });
 
 
-    const {onRequest, messages, setMessages} = useXChat({agent});
+  const {onRequest, messages, setMessages} = useXChat({agent});
 
-    useEffect(() => {
-      if (activeKey !== undefined) {
-        setMessages([]);
-      }
-    }, [activeKey]);
+  useEffect(() => {
+    if (activeKey !== undefined) {
+      setMessages([]);
+    }
+    activeKeyRef.current = activeKey;
+  }, [activeKey]);
 
-    // ==================== 事件处理 ====================
+  // ==================== 事件处理 ====================
   const onSubmit = async (nextContent: string) => {
     if (!nextContent) return;
     // 如果当前 activeKey 为 "0"，说明还没有创建真正的会话，则使用用户输入的文字作为会话名称
-    if (activeKey === "0") {
+    if (activeKeyRef.current === "0") {
       const userId = authStore.user.uid;
       try {
-        const response = await createSession({ user_id: userId, name: nextContent });
-        if (response.code === 1 && response.data) {
+        const response = await createSession({user_id: userId, name: nextContent});
+        if (response.ok) {
           const newSession = response.data;
-          setActiveKey(newSession.id.toString());
+
+          const sessionId = newSession.id.toString();
+          buildActiveKey(sessionId);
           setConversationsItems([
             ...conversationsItems,
-            { key: newSession.id.toString(), label: newSession.name },
+            {key: sessionId, label: newSession.name},
           ]);
         } else {
           console.error("创建会话失败", response);
@@ -289,176 +311,214 @@ const Independent: React.FC = () => {
   };
 
 
-  const onPromptsItemClick: GetProp<typeof Prompts, 'onItemClick'> = (info) => {
-      onRequest(info.data.description as string);
-    };
+  const onPromptsItemClick: GetProp<typeof Prompts, 'onItemClick'> = async (info) => {
+    if(activeKeyRef.current==='0'){
+      const response = await createSession({user_id: authStore.user.uid, name: info.data.description as string});
+      if (response.ok) {
+        const newSession = response.data;
 
-    const onAddConversation = () => {
-      setConversationsItems([
-        ...conversationsItems,
-        {
-          key: `${conversationsItems.length}`,
-          label: `New Conversation ${conversationsItems.length}`,
-        },
-      ]);
-      setActiveKey(`${conversationsItems.length}`);
-    };
-
-    const onConversationClick: GetProp<typeof Conversations, 'onActiveChange'> = (key) => {
-      setActiveKey(key);
-    };
-
-    const handleFileChange: GetProp<typeof Attachments, 'onChange'> = (info) =>
-      setAttachedFiles(info.fileList);
-
-    // ==================== 节点 ====================
-    const placeholderNode = (
-      <Space direction="vertical" size={16} className={styles.placeholder}>
-        <Welcome
-          variant="borderless"
-          icon="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*s5sNRo5LjfQAAAAAAAAAAAAADgCCAQ/fmt.webp"
-          title="Hello, I'm Ant Design X"
-          description="基于 Ant Design，AGI 产品界面解决方案，创造更智能的视觉体验~"
-          extra={
-            <Space>
-              <Button icon={<ShareAltOutlined/>}/>
-              <Button icon={<EllipsisOutlined/>}/>
-            </Space>
-          }
-        />
-        <Prompts
-          title="Do you want?"
-          items={placeholderPromptsItems}
-          styles={{
-            list: {
-              width: '100%',
-            },
-            item: {
-              flex: 1,
-            },
-          }}
-          onItemClick={onPromptsItemClick}
-        />
-      </Space>
-    );
-
-    const items = messages.map((e) => {
-      const {message, id, status} = e;
-      // console.log("e:", e);
-      const role = status === 'local' ? 'local' : 'ai';
-      if (role === 'local') {
-        return ({
-          key: id,
-          //loading: status === 'loading',
-          role: role,
-          messageRender: renderMarkdown,
-          content: message,
-          avatar: {icon: <UserOutlined/>}
-        })
+        const sessionId = newSession.id.toString();
+        buildActiveKey(sessionId);
+        setConversationsItems([
+          ...conversationsItems,
+          {key: sessionId, label: newSession.name},
+        ]);
       } else {
-        return ({
-          key: id,
-          //loading: status === 'loading',
-          role: role,
-          messageRender: renderMarkdown,
-          content: message,
-          avatar: {icon: <OpenAIOutlined/>}
-        })
+        console.error("创建会话失败", response);
+        return;
       }
+    }
+    onRequest(info.data.description as string);
+  };
 
-    });
+  const onAddConversation = async () => {
+    const userId = authStore.user.uid;
+    try {
+      const response = await createSession({user_id: userId, name: "New Chat"});
+      if (response.ok) {
+        const newSession = response.data;
 
-    const attachmentsNode = (
-      <Badge dot={attachedFiles.length > 0 && !headerOpen}>
-        <Button type="text" icon={<PaperClipOutlined/>} onClick={() => setHeaderOpen(!headerOpen)}/>
-      </Badge>
-    );
+        const sessionId = newSession.id.toString();
+        buildActiveKey(sessionId);
+        setActiveKey(sessionId);
+        setConversationsItems([
+          ...conversationsItems,
+          {key: sessionId, label: newSession.name},
+        ]);
+      } else {
+        console.error("创建会话失败", response);
+        return;
+      }
+    } catch (err) {
+      console.error("调用 createSession 接口出错", err);
+      return;
+    }
 
-    const senderHeader = (
-      <Sender.Header
-        title="Attachments"
-        open={headerOpen}
-        onOpenChange={setHeaderOpen}
+    // setConversationsItems([
+    //   ...conversationsItems,
+    //   {
+    //     key: `${conversationsItems.length}`,
+    //     label: `New Conversation ${conversationsItems.length}`,
+    //   },
+    // ]);
+
+  };
+
+  const onConversationClick: GetProp<typeof Conversations, 'onActiveChange'> = (key) => {
+    setActiveKey(key);
+  };
+
+  const handleFileChange: GetProp<typeof Attachments, 'onChange'> = (info) =>
+    setAttachedFiles(info.fileList);
+
+  // ==================== 节点 ====================
+  const placeholderNode = (
+    <Space direction="vertical" size={16} className={styles.placeholder}>
+      <Welcome
+        variant="borderless"
+        icon="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*s5sNRo5LjfQAAAAAAAAAAAAADgCCAQ/fmt.webp"
+        title="Hello, I'm Ant Design X"
+        description="基于 Ant Design，AGI 产品界面解决方案，创造更智能的视觉体验~"
+        extra={
+          <Space>
+            <Button icon={<ShareAltOutlined/>}/>
+            <Button icon={<EllipsisOutlined/>}/>
+          </Space>
+        }
+      />
+      <Prompts
+        title="Do you want?"
+        items={placeholderPromptsItems}
         styles={{
-          content: {
-            padding: 0,
+          list: {
+            width: '100%',
+          },
+          item: {
+            flex: 1,
           },
         }}
-      >
-        <Attachments
-          beforeUpload={() => false}
-          items={attachedFiles}
-          onChange={handleFileChange}
-          placeholder={(type) =>
-            type === 'drop'
-              ? {title: 'Drop file here'}
-              : {
-                icon: <CloudUploadOutlined/>,
-                title: 'Upload files',
-                description: '点击或拖拽文件到此区域进行上传',
-              }
-          }
-        />
-      </Sender.Header>
-    );
+        onItemClick={onPromptsItemClick}
+      />
+    </Space>
+  );
 
-    const logoNode = (
-      <div className={styles.logo}>
-        <img
-          src="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*eco6RrQhxbMAAAAAAAAAAAAADgCCAQ/original"
-          draggable={false}
-          alt="logo"
-        />
-        <span>Ant Design X</span>
-      </div>
-    );
+  const items = messages.map((e) => {
+    const {message, id, status} = e;
+    //console.log("e:", e);
+    const role = status === 'local' ? 'local' : 'ai';
+    if (role === 'local') {
+      return ({
+        key: id,
+        //loading: status === 'loading',
+        role: role,
+        messageRender: renderMarkdown,
+        content: message,
+        avatar: {icon: <UserOutlined/>}
+      })
+    } else {
+      return ({
+        key: id,
+        //loading: status === 'loading',
+        role: role,
+        messageRender: renderMarkdown,
+        content: message,
+        avatar: {icon: <OpenAIOutlined/>}
+      })
+    }
 
-    // ==================== 渲染 ====================
-    return (
-      <div className={styles.layout}>
-        <div className={styles.menu}>
-          {/* 🌟 Logo */}
-          {logoNode}
-          {/* 🌟 添加会话 */}
-          <Button
-            onClick={onAddConversation}
-            type="link"
-            className={styles.addBtn}
-            icon={<PlusOutlined/>}
-          >
-            New Conversation
-          </Button>
-          {/* 🌟 会话管理 */}
-          <Conversations
-            items={conversationsItems}
-            className={styles.conversations}
-            activeKey={activeKey}
-            onActiveChange={onConversationClick}
-          />
-        </div>
-        <div className={styles.chat}>
-          {/* 🌟 消息列表 */}
-          <Bubble.List
-            items={items.length > 0 ? items : [{content: placeholderNode, variant: 'borderless'}]}
-            roles={roles}
-            className={styles.messages}
-          />
-          {/* 🌟 提示词 */}
-          <Prompts items={senderPromptsItems} onItemClick={onPromptsItemClick}/>
-          {/* 🌟 输入框 */}
-          <Sender
-            value={content}
-            header={senderHeader}
-            onSubmit={onSubmit}
-            onChange={setContent}
-            prefix={attachmentsNode}
-            loading={agent.isRequesting()}
-            className={styles.sender}
-          />
-        </div>
+  });
+
+  const attachmentsNode = (
+    <Badge dot={attachedFiles.length > 0 && !headerOpen}>
+      <Button type="text" icon={<PaperClipOutlined/>} onClick={() => setHeaderOpen(!headerOpen)}/>
+    </Badge>
+  );
+
+  const senderHeader = (
+    <Sender.Header
+      title="Attachments"
+      open={headerOpen}
+      onOpenChange={setHeaderOpen}
+      styles={{
+        content: {
+          padding: 0,
+        },
+      }}
+    >
+      <Attachments
+        beforeUpload={() => false}
+        items={attachedFiles}
+        onChange={handleFileChange}
+        placeholder={(type) =>
+          type === 'drop'
+            ? {title: 'Drop file here'}
+            : {
+              icon: <CloudUploadOutlined/>,
+              title: 'Upload files',
+              description: '点击或拖拽文件到此区域进行上传',
+            }
+        }
+      />
+    </Sender.Header>
+  );
+
+  const logoNode = (
+    <div className={styles.logo}>
+      <img
+        src="https://mdn.alipayobjects.com/huamei_iwk9zp/afts/img/A*eco6RrQhxbMAAAAAAAAAAAAADgCCAQ/original"
+        draggable={false}
+        alt="logo"
+      />
+      <span>Ant Design X</span>
+    </div>
+  );
+
+  // ==================== 渲染 ====================
+  return (
+    <div className={styles.layout}>
+      <div className={styles.menu}>
+        {/* 🌟 Logo */}
+        {logoNode}
+        {/* 🌟 添加会话 */}
+        <Button
+          onClick={onAddConversation}
+          type="link"
+          className={styles.addBtn}
+          icon={<PlusOutlined/>}
+        >
+          New Conversation
+        </Button>
+        {/* 🌟 会话管理 */}
+        <Conversations
+          items={conversationsItems}
+          className={styles.conversations}
+          activeKey={activeKey}
+          onActiveChange={onConversationClick}
+        />
       </div>
-    );
-  }
-;
+      <div className={styles.chat}>
+        {/* 🌟 消息列表 */}
+        <Bubble.List
+          items={items.length > 0 ? items : [{content: placeholderNode, variant: 'borderless'}]}
+          roles={roles}
+          className={styles.messages}
+        />
+        {/* 🌟 提示词 */}
+        <Prompts items={senderPromptsItems} onItemClick={onPromptsItemClick}/>
+        {/* 🌟 输入框 */}
+        <Sender
+          value={content}
+          header={senderHeader}
+          onSubmit={onSubmit}
+          onChange={setContent}
+          prefix={attachmentsNode}
+          loading={agent.isRequesting()}
+          className={styles.sender}
+        />
+      </div>
+    </div>
+  );
+};
+
 
 export default Independent;

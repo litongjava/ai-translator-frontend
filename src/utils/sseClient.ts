@@ -14,6 +14,7 @@ export async function sendSSERequest(options: {
   accessToken?: string | null;
   userId: string;
   sessionId: string;
+  school_id?: string;
   messages: ChatMessage[];
   type?: string;
   app_id?: string;
@@ -21,11 +22,12 @@ export async function sendSSERequest(options: {
   onEvent: (event: SSEEvent) => void;
 }) {
   const {
+    type = "general",
     accessToken,
     userId,
     sessionId,
+    school_id,
     messages,
-    type = "general",
     app_id = "",
     chat_type = 0,
     onEvent,
@@ -40,11 +42,12 @@ export async function sendSSERequest(options: {
 
   // 构造符合后端接口要求的请求体，并确保 chat_type 字段被发送
   const body = {
+    provider: "openai", // 根据后端要求，如有需要调整为 "opneai"
+    model: 'gpt-4o-mini',
+    type, // 如 "general"、"kb" 等
     user_id: userId,
     session_id: sessionId,
-    type, // 如 "general"、"kb" 等
-    provider: "openai", // 根据后端要求，如有需要调整为 "opneai"
-    school_id: 1, // 如需动态，可改为从参数传入
+    school_id: school_id,
     app_id,
     chat_type, // 已添加
     messages,
@@ -70,9 +73,12 @@ export async function sendSSERequest(options: {
 
   while (true) {
     const {done, value} = await reader.read();
-    if (done) break;
+    if (done) {
+      onEvent({type: 'done', data: ""});
+      break;
+    }
     buffer += decoder.decode(value, {stream: true});
-    const parts = buffer.split("\n\n");
+    const parts = buffer.split("\r\n\r\n");
     // 最后一部分可能是不完整的数据，保留到下次拼接
     buffer = parts.pop() || "";
     for (const part of parts) {
