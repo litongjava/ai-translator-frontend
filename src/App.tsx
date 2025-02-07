@@ -46,7 +46,9 @@ const md = markdownit({html: true, breaks: true});
 
 // 跟单条 Bubble 的做法一样
 const renderMarkdown = (content: string) => (
-  <div dangerouslySetInnerHTML={{__html: md.render(content)}}/>
+  <div>
+    <div dangerouslySetInnerHTML={{__html: md.render(content)}}/>
+  </div>
 );
 
 // 渲染标题的辅助函数
@@ -215,23 +217,33 @@ const roles: GetProp<typeof Bubble.List, 'roles'> = {
   ai: {
     placement: 'start',
     typing: {step: 5, interval: 20},
+    variant: 'shadow',
     styles: {
       content: {
         borderRadius: 16,
+        fontSize: 15,
       },
     },
+
   },
   aiHistroy: {
     placement: 'start',
+    variant: 'shadow',
     styles: {
       content: {
         borderRadius: 16,
+        fontSize: 15,
       },
     },
   },
   local: {
     placement: 'end',
     variant: 'shadow',
+    styles: {
+      content: {
+        fontSize: 15,
+      }
+    }
   },
 };
 
@@ -419,8 +431,8 @@ const Independent: React.FC = () => {
         buildActiveKey(sessionId);
         setActiveKey(sessionId);
         setConversationsItems([
-          ...conversationsItems,
           {key: sessionId, label: newSession.name},
+          ...conversationsItems,
         ]);
       } else {
         console.error("创建会话失败", response);
@@ -430,15 +442,6 @@ const Independent: React.FC = () => {
       console.error("调用 createSession 接口出错", err);
       return;
     }
-
-    // setConversationsItems([
-    //   ...conversationsItems,
-    //   {
-    //     key: `${conversationsItems.length}`,
-    //     label: `New Conversation ${conversationsItems.length}`,
-    //   },
-    // ]);
-
   };
 
   const onConversationClick: GetProp<typeof Conversations, 'onActiveChange'> = (key) => {
@@ -482,7 +485,7 @@ const Independent: React.FC = () => {
   );
 
   const items = messages.map((e) => {
-    const { message, id, status, isHistory } = e as {
+    const {message, id, status, isHistory} = e as {
       message: string;
       id: string;
       status: MessageStatus;
@@ -505,7 +508,7 @@ const Independent: React.FC = () => {
         role: 'aiHistroy',
         messageRender: renderMarkdown,
         content: message,
-        avatar: { icon: <OpenAIOutlined /> },
+        avatar: {icon: <OpenAIOutlined/>},
       };
     } else {
       return ({
@@ -593,8 +596,8 @@ const Independent: React.FC = () => {
         <Bubble.List
           items={
             loadingHistory
-              ? [{ content: <div style={{ padding: '16px', textAlign: 'center' }}>加载中...</div>, variant: 'borderless' }]
-              : (items.length > 0 ? items : [{ content: placeholderNode, variant: 'borderless' }])
+              ? [{content: <div style={{padding: '16px', textAlign: 'center'}}>加载中...</div>, variant: 'borderless'}]
+              : (items.length > 0 ? items : [{content: placeholderNode, variant: 'borderless'}])
           }
           roles={roles}
           className={styles.messages}
