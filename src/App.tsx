@@ -155,14 +155,7 @@ const placeholderPromptsItems: GetProp<typeof Prompts, 'items'> = [
     children: [
       {
         key: '1-1',
-        description: `You are a Chinese-English translation expert, tasked with translating user input from Chinese to English or from English to Chinese.
-
-- Users can send content requiring translation to the assistant, who will respond with the corresponding translation result while ensuring alignment with the conventions of the target language.
-- You may adjust the tone and style accordingly, taking into account cultural connotations and regional variations of certain terms.
-- Preserve the format of the source content during translation.
-- Do not provide any explanations or text apart from the translation.
-- Only output the translated text
-`,
+        description: `How are you`,
       },
       {
         key: '1-2',
@@ -281,7 +274,7 @@ const Independent: React.FC = () => {
           userId,
           sessionId,
           messages: messagesPayload,
-          type: "general", // 可根据业务需要修改
+          type: "translator", // 可根据业务需要修改
           onEvent: (event: SSEEvent) => {
             //console.log("SSE Event:", event);
             if (event.type === "delta") {
