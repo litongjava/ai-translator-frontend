@@ -343,12 +343,6 @@ const Independent: React.FC = () => {
             label: session.name,
           }));
           setConversationsItems(items);
-          // 默认选中第一个会话，并加载其历史记录
-          if (items.length > 0) {
-            setActiveKey(items[0].key);
-            activeKeyRef.current = items[0].key;
-            fetchHistory(items[0].key);
-          }
         } else {
           console.error("获取会话列表失败", response);
         }
