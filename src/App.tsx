@@ -368,8 +368,8 @@ const Independent: React.FC = () => {
           const sessionId = newSession.id.toString();
           buildActiveKey(sessionId);
           setConversationsItems([
-            ...conversationsItems,
             {key: sessionId, label: newSession.name},
+            ...conversationsItems,
           ]);
         } else {
           console.error("创建会话失败", response);
@@ -396,8 +396,8 @@ const Independent: React.FC = () => {
         const sessionId = newSession.id.toString();
         buildActiveKey(sessionId);
         setConversationsItems([
-          ...conversationsItems,
           {key: sessionId, label: newSession.name},
+          ...conversationsItems,
         ]);
       } else {
         console.error("创建会话失败", response);
