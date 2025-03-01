@@ -8,12 +8,14 @@ import {
   CommentOutlined,
   EllipsisOutlined,
   FireOutlined,
-  HeartOutlined, OpenAIOutlined,
+  HeartOutlined,
+  OpenAIOutlined,
   PaperClipOutlined,
   PlusOutlined,
   ReadOutlined,
   ShareAltOutlined,
-  SmileOutlined, UserOutlined,
+  SmileOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import {Badge, Button, type GetProp, Space} from 'antd';
 import markdownit from 'markdown-it';

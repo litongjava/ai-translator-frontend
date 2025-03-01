@@ -1,3 +1,8 @@
+// 从 Vite 的环境变量中获取后端地址（需在 .env 文件中配置，例如 VITE_BACKEND_URL）
+const BASE_URL = import.meta.env.VITE_BACKEND_URL;
+if (!BASE_URL) {
+  throw new Error("Missing backend URL in environment variables");
+}
 // 定义消息数据结构，根据业务需要扩展字段
 export interface ChatMessage {
   role: string;
@@ -33,11 +38,7 @@ export async function sendSSERequest(options: {
     onEvent,
   } = options;
 
-  // 从 Vite 的环境变量中获取后端地址（需在 .env 文件中配置，例如 VITE_BACKEND_URL）
-  const BASE_URL = import.meta.env.VITE_BACKEND_URL;
-  if (!BASE_URL) {
-    throw new Error("Missing backend URL in environment variables");
-  }
+
   const url = `${BASE_URL}/api/v1/chat/send`;
 
   // 构造符合后端接口要求的请求体，并确保 chat_type 字段被发送
