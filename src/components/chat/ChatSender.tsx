@@ -36,20 +36,16 @@ const ChatSender: React.FC<ChatSenderProps> = ({
                                                  onSubmit,
                                                  onCancel,
                                                  platform,
-                                                 setPlatform,
                                                  model,
                                                  setModel,
                                                  type,
                                                  setType,
                                                  tools,
-                                                 setTools,
                                                  loading,
                                                  attachmentsOpen,
                                                  setAttachmentsOpen,
                                                  attachedFiles,
                                                  setAttachedFiles,
-                                                 historyEnabled,
-                                                 setHistoryEnabled
                                                }) => {
   // 在组件内添加 onPasteFile 处理
   const handlePasteFile = async (_firstFile: File, files: FileList) => {
