@@ -127,7 +127,7 @@ export const TYPE_OPTIONS = [
   {label: 'Translator', value: 'translator'},
   {label: 'vocabulary', value: 'english_vocabulary'},
   {label: 'sentence', value: 'english_sentence'},
-  {label: 'General', value: 'genearl'},
+  {label: 'General', value: 'general'},
 ]
 
 
