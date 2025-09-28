@@ -2,7 +2,7 @@ p{
     margin-top: 0;
     margin-bottom: 0;
 }
-:where(.css-dev-only-do-not-override-1hbti3n).ant-bubble .ant-bubble-content {
+.ant-bubble .ant-bubble-content {
     min-height: auto;
 }
 .loading-container {
